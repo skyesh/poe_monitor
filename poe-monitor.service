@@ -1,0 +1,16 @@
+[Unit]
+Description=PoE Monitor (multi-switch)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/poe_monitor
+EnvironmentFile=/opt/poe_monitor/poe-monitor.env
+ExecStart=/opt/poe_monitor/venv/bin/python /opt/poe_monitor/poe_monitor.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
