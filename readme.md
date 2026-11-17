@@ -51,7 +51,7 @@ python3 -m venv venv
 ```bash
 command -v snmpget
 command -v snmpset
-snmpget -v2c -c public 10.10.5.168 1.3.6.1.2.1.1.1.0
+snmpget -v2c -c public IP 1.3.6.1.2.1.1.1.0
 ```
 Ostatnie polecenie jest przykładem z archiwum testowego; użyj swoich danych, jeśli uległy zmianie.
 
