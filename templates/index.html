@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PoE Monitor</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1220;--panel:#131f32;--panel2:#0f1a2b;--line:#26364d;--text:#e6edf7;--muted:#9aabc2;--blue:#54c2ef;--green:#39c98a;--red:#ff6b72;--yellow:#f4c66a}
+*{box-sizing:border-box}body{margin:0;background:linear-gradient(135deg,#0b1220,#101b2d);color:var(--text);font:15px system-ui,Segoe UI,Arial;padding:28px}
+main{max-width:1400px;margin:auto}h1{margin:0 0 6px;font-size:30px}h2{font-size:19px;margin:0 0 18px;color:var(--blue)}p.sub{color:var(--muted);margin:0 0 24px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.wide{grid-column:1/-1}.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px;box-shadow:0 8px 22px #0002}
+form.fields{display:flex;flex-wrap:wrap;gap:12px;align-items:end}label{display:flex;flex-direction:column;gap:6px;color:var(--muted);font-size:13px;min-width:130px;flex:1}
+input,select{background:var(--panel2);border:1px solid var(--line);color:var(--text);padding:10px;border-radius:8px;min-width:0;font:inherit}button{border:0;border-radius:8px;padding:10px 14px;background:var(--blue);color:#061522;font-weight:700;cursor:pointer}button:hover{filter:brightness(1.08)}button.danger{background:#542832;color:#ffdce0}button.secondary{background:#263b55;color:#e6edf7}button.small{padding:7px 10px;font-size:12px}
+table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:11px 9px;border-bottom:1px solid var(--line);vertical-align:middle}th{color:var(--blue);font-weight:700}td{overflow-wrap:anywhere}.muted{color:var(--muted)}.pill{display:inline-block;padding:4px 8px;border-radius:99px;font-size:11px;background:#263b55;color:#dceaff}.pill.ok{background:#123d32;color:#8af0c1}.pill.off{background:#493b20;color:#ffdc91}
+.actions{display:flex;gap:6px;flex-wrap:wrap}.inline{display:inline}.notice{padding:11px 14px;border-radius:9px;margin:0 0 12px}.success{background:#123d32;color:#a4f2ca}.error{background:#4a2029;color:#ffc4c9}
+small{color:var(--muted)}.hint{font-size:12px;color:var(--muted);margin-top:10px}.empty{color:var(--muted);padding:12px 0}
+@media(max-width:850px){body{padding:14px}.grid{grid-template-columns:1fr}.wide{grid-column:auto}.table-wrap{overflow-x:auto}h1{font-size:24px}}
+</style>
+</head>
+<body><main>
+<h1>PoE Monitor</h1><p class="sub">Monitoring ICMP i automatyczny power cycle PoE przez SNMP v1/v2c · HP 2620-48-PoEP</p>
+{% with messages=get_flashed_messages(with_categories=true) %}
+{% for category,message in messages %}<div class="notice {{category}}">{{message}}</div>{% endfor %}
+{% endwith %}
+<div class="grid">
+<section class="card">
+<h2>Dodaj switch</h2>
+<form class="fields" method="post" action="{{url_for('add_switch')}}">
+<input type="hidden" name="_csrf" value="{{csrf_token}}">
+<label>Nazwa<input name="name" placeholder="HP 2620 - serwerownia" required></label>
+<label>Adres IP<input name="ip" placeholder="10.10.5.168" required></label>
+<label>Community SNMP<input name="community" type="password" autocomplete="new-password" required></label>
+<label>Wersja<select name="version"><option value="2c">SNMP v2c</option><option value="1">SNMP v1</option></select></label>
+<button type="submit">Dodaj switch</button>
+</form>
+<p class="hint">Community jest przechowywane w lokalnej bazie SQLite i nie jest wyświetlane w tabeli.</p>
+</section>
+<section class="card">
+<h2>Dodaj monitorowane urządzenie</h2>
+<form class="fields" method="post" action="{{url_for('add_camera')}}">
+<input type="hidden" name="_csrf" value="{{csrf_token}}">
+<label>Nazwa<input name="name" placeholder="Kamera wejście" required></label>
+<label>Adres IP<input name="target_ip" placeholder="10.10.5.101" required></label>
+<label>Switch<select name="switch_id" required>{% for s in switches %}<option value="{{s.id}}">{{s.name}} ({{s.ip}})</option>{% endfor %}</select></label>
+<label>Port PoE (1–48)<input name="port_index" type="number" min="1" max="48" placeholder="27" required></label>
+<button type="submit" {% if not switches %}disabled{% endif %}>Dodaj i monitoruj</button>
+</form>
+<p class="hint">Indeks portu jest używany w OID: 1.3.6.1.2.1.105.1.1.1.3.1.PORT</p>
+</section>
+
+<section class="card wide">
+<h2>Switche SNMP</h2>
+{% if switches %}
+<div class="table-wrap"><table><thead><tr><th>Nazwa</th><th>IP</th><th>SNMP</th><th>Test</th><th>Akcje</th></tr></thead><tbody>
+{% for s in switches %}<tr><td>{{s.name}}</td><td>{{s.ip}}</td><td><span class="pill">v{{s.version}}</span> <span class="muted">community ukryte</span></td>
+<td><form class="inline" method="post" action="{{url_for('test_switch',switch_id=s.id)}}"><input type="hidden" name="_csrf" value="{{csrf_token}}"><button class="secondary small">Test SNMP</button></form></td>
+<td><div class="actions">
+<details><summary style="cursor:pointer;color:var(--blue)">Edytuj</summary>
+<form class="fields" method="post" action="{{url_for('edit_switch',switch_id=s.id)}}" style="padding:10px 0">
+<input type="hidden" name="_csrf" value="{{csrf_token}}">
+<label>Nazwa<input name="name" value="{{s.name}}" required></label>
+<label>IP<input name="ip" value="{{s.ip}}" required></label>
+<label>Community (puste = bez zmian)<input name="community" type="password" autocomplete="new-password" placeholder="••••••••"></label>
+<label>SNMP<select name="version"><option value="2c" {% if s.version=='2c' %}selected{% endif %}>v2c</option><option value="1" {% if s.version=='1' %}selected{% endif %}>v1</option></select></label>
+<button class="small" type="submit">Zapisz</button>
+</form></details>
+<form class="inline" method="post" action="{{url_for('delete_switch',switch_id=s.id)}}" onsubmit="return confirm('Usunąć switch?')"><input type="hidden" name="_csrf" value="{{csrf_token}}"><button class="danger small">Usuń</button></form>
+</div></td></tr>{% endfor %}
+</tbody></table></div>
+{% else %}<p class="empty">Nie dodano jeszcze switchy.</p>{% endif %}
+</section>
+
+<section class="card wide">
+<h2>Monitorowane urządzenia</h2>
+{% if cameras %}
+<div class="table-wrap"><table><thead><tr><th>Nazwa</th><th>IP</th><th>Switch</th><th>Port</th><th>Status</th><th>Błędy</th><th>Monitoring</th><th>Akcje</th></tr></thead><tbody>
+{% for c in cameras %}<tr>
+<td>{{c.name}}</td><td>{{c.target_ip}}</td><td>{{c.switch_name or 'Brak przypisania'}}</td><td>{{c.port_index}}</td>
+<td>{{c.last_status}}</td><td>{{c.fail_count}}</td><td>{% if c.enabled %}<span class="pill ok">Aktywny</span>{% else %}<span class="pill off">Wyłączony</span>{% endif %}</td>
+<td><div class="actions">
+<form class="inline" method="post" action="{{url_for('toggle_camera',camera_id=c.id)}}"><input type="hidden" name="_csrf" value="{{csrf_token}}"><button class="secondary small">{{'Wyłącz' if c.enabled else 'Włącz'}}</button></form>
+<form class="inline" method="post" action="{{url_for('manual_cycle',camera_id=c.id)}}" onsubmit="return confirm('Wykonać power cycle portu {{c.port_index}}?')"><input type="hidden" name="_csrf" value="{{csrf_token}}"><button class="small">Restart PoE</button></form>
+<form class="inline" method="post" action="{{url_for('delete_camera',camera_id=c.id)}}" onsubmit="return confirm('Usunąć urządzenie?')"><input type="hidden" name="_csrf" value="{{csrf_token}}"><button class="danger small">Usuń</button></form>
+</div></td></tr>{% endfor %}
+</tbody></table></div>
+{% else %}<p class="empty">Nie dodano jeszcze urządzeń.</p>{% endif %}
+</section>
+
+<section class="card">
+<h2>Ustawienia watchdog</h2>
+<form class="fields" method="post" action="{{url_for('save_settings')}}">
+<input type="hidden" name="_csrf" value="{{csrf_token}}">
+<label>Interwał ping (sek.)<input type="number" name="ping_interval" min="5" max="3600" value="{{settings.ping_interval}}" required></label>
+<label>Nieudane próby<input type="number" name="fail_threshold" min="1" max="20" value="{{settings.fail_threshold}}" required></label>
+<label>PoE OFF (sek.)<input type="number" name="poe_off_time" min="3" max="120" value="{{settings.poe_off_time}}" required></label>
+<label>Cooldown (sek.)<input type="number" name="cooldown" min="60" max="86400" value="{{settings.cooldown}}" required></label>
+<label>Max restartów/h<input type="number" name="max_restarts_hour" min="1" max="10" value="{{settings.max_restarts_hour}}" required></label>
+<button type="submit">Zapisz ustawienia</button>
+</form>
+<p class="hint">Domyślnie: ping co 30 s, 5 kolejnych niepowodzeń, PoE OFF przez 10 s, cooldown 5 min i maksymalnie 2 restarty na godzinę na urządzenie.</p>
+</section>
+
+<section class="card">
+<h2>Ostatnie zdarzenia</h2>
+{% if events %}<div class="table-wrap"><table><thead><tr><th>Czas (UTC)</th><th>Urządzenie</th><th>Switch / port</th><th>Zdarzenie</th><th>Szczegóły</th></tr></thead><tbody>
+{% for e in events %}<tr><td>{{e.created_at}}</td><td>{{e.camera_name or '—'}}</td><td>{{e.switch_name or '—'}} / {{e.port_index or '—'}}</td><td><span class="pill">{{e.event_type}}</span></td><td>{{e.message}}</td></tr>{% endfor %}
+</tbody></table></div>{% else %}<p class="empty">Brak zdarzeń.</p>{% endif %}
+</section>
+</div>
+<p class="hint">Wskazówka bezpieczeństwa: udostępniaj panel wyłącznie w zaufanej sieci zarządzającej. Używaj community SNMP z prawem zapisu tylko wtedy, gdy jest to konieczne.</p>
+</main></body></html>
